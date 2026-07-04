@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hardenExistingSecureFile, writeSecureJsonFile } from '../../shared/secure-file'
+import { constantTimeEqual } from '../../shared/constant-time-equal'
 import type { DeviceScope } from '../../shared/runtime-types'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 
@@ -87,7 +88,9 @@ export class DeviceRegistry {
   }
 
   validateToken(token: string): DeviceEntry | null {
-    return this.devices.find((d) => d.token === token) ?? null
+    // Why: constant-time compare so token validation does not leak which byte
+    // (or length) differed via timing.
+    return this.devices.find((d) => constantTimeEqual(d.token, token)) ?? null
   }
 
   updateLastSeen(deviceId: string): void {

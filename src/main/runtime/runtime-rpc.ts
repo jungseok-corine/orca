@@ -21,6 +21,8 @@ import { DeviceRegistry, type DeviceScope } from './device-registry'
 import { loadOrCreateE2EEKeypair, type E2EEKeypair } from './e2ee-keypair'
 import { E2EEChannel } from './rpc/e2ee-channel'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
+import { constantTimeEqual } from '../../shared/constant-time-equal'
+import { LOOPBACK_HOST } from './network-bind-policy'
 import {
   decodeTerminalStreamFrame,
   type TerminalStreamFrame
@@ -35,6 +37,9 @@ type OrcaRuntimeRpcServerOptions = {
   platform?: NodeJS.Platform
   enableWebSocket?: boolean
   wsPort?: number
+  // Why: interface the WebSocket transport binds to. Defaults to loopback;
+  // callers opt into LAN exposure explicitly (see network-bind-policy).
+  wsBindHost?: string
   webClientRoot?: string
   // Why: test-only overrides for the two time-bound constants below.
   // Production callers must not pass these — defaults are set by the design
@@ -393,6 +398,10 @@ export class OrcaRuntimeRpcServer {
   private readonly platform: NodeJS.Platform
   private readonly enableWebSocket: boolean
   private readonly wsPort: number
+  // Why: default to loopback so the mobile/CLI control plane is not exposed on
+  // every interface. LAN exposure (for the phone over Wi-Fi) is an explicit
+  // opt-in resolved at construction. See network-bind-policy.
+  private readonly wsBindHost: string
   private readonly webClientRoot: string | undefined
   private readonly authToken = randomBytes(24).toString('hex')
   private readonly keepaliveIntervalMs: number
@@ -430,6 +439,7 @@ export class OrcaRuntimeRpcServer {
     platform = process.platform,
     enableWebSocket = false,
     wsPort = DEFAULT_WS_PORT,
+    wsBindHost = LOOPBACK_HOST,
     webClientRoot,
     keepaliveIntervalMs = KEEPALIVE_INTERVAL_MS,
     longPollCap = LONG_POLL_CAP
@@ -441,6 +451,7 @@ export class OrcaRuntimeRpcServer {
     this.platform = platform
     this.enableWebSocket = enableWebSocket
     this.wsPort = wsPort
+    this.wsBindHost = wsBindHost
     this.webClientRoot = webClientRoot
     this.keepaliveIntervalMs = keepaliveIntervalMs
     this.longPollCap = longPollCap
@@ -697,7 +708,7 @@ export class OrcaRuntimeRpcServer {
         this.e2eeKeypair = loadOrCreateE2EEKeypair(this.userDataPath)
 
         const wsTransport = new WebSocketTransport({
-          host: '0.0.0.0',
+          host: this.wsBindHost,
           port: this.wsPort,
           staticRoot: this.webClientRoot
         })
@@ -785,7 +796,7 @@ export class OrcaRuntimeRpcServer {
         activeTransports.push(wsTransport)
         transportsMeta.push({
           kind: 'websocket',
-          endpoint: `ws://0.0.0.0:${wsTransport.resolvedPort}`
+          endpoint: `ws://${this.wsBindHost}:${wsTransport.resolvedPort}`
         })
       } catch (error) {
         // Why: WebSocket transport is supplementary — the runtime must still
@@ -898,7 +909,7 @@ export class OrcaRuntimeRpcServer {
     if (typeof request.authToken !== 'string' || request.authToken.length === 0) {
       return { error: this.buildError(request.id, 'unauthorized', 'Missing auth token') }
     }
-    if (request.authToken !== this.authToken) {
+    if (!constantTimeEqual(request.authToken, this.authToken)) {
       return { error: this.buildError(request.id, 'unauthorized', 'Invalid auth token') }
     }
 

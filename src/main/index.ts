@@ -40,6 +40,7 @@ import { resolveConsent } from './telemetry/consent'
 import { triggerStartupNotificationRegistration } from './ipc/notifications'
 import { OrcaRuntimeService } from './runtime/orca-runtime'
 import { OrcaRuntimeRpcServer } from './runtime/runtime-rpc'
+import { resolveBindHostFromEnv } from './runtime/network-bind-policy'
 import { awaitRuntimeFileWatcherUnsubscribes } from './runtime/orca-runtime-files'
 import { clearRuntimeMetadataIfOwned } from './runtime/runtime-metadata'
 import { ensureMainI18n, setMainUiLanguage } from './i18n/main-i18n'
@@ -2001,8 +2002,15 @@ app.whenReady().then(async () => {
   // under the late app.getPath('userData') directory. Copy any missing files
   // forward before the runtime switches exclusively to the canonical path.
   migrateMobilePairingDataToCanonicalUserDataPath(app.getPath('userData'))
+  // Why: bind the mobile/CLI control-plane WebSocket to loopback by default.
+  // LAN exposure (phone over Wi-Fi) is opt-in via ORCA_MOBILE_NETWORK_EXPOSURE.
+  const wsBind = resolveBindHostFromEnv()
+  if (wsBind.warning) {
+    console.warn(`[runtime-rpc] ${wsBind.warning}`)
+  }
   runtimeRpc = new OrcaRuntimeRpcServer({
     runtime,
+    wsBindHost: wsBind.host,
     // Why: mobile pairing (DeviceRegistry + E2EE keypair + runtime metadata)
     // must share the stable path captured before app.setName(), not a late
     // app.getPath('userData') that resolves elsewhere and drops paired devices
