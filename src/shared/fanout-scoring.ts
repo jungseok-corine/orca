@@ -43,20 +43,26 @@ export type ScoredCandidate = {
 }
 
 function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0
+  if (Number.isNaN(n)) {
+    return 0
+  }
   return Math.max(0, Math.min(1, n))
 }
 
 function testRatio(passed: number, total: number): number {
   // No tests is neutral, not a win — it carries no evidence of correctness.
-  if (total <= 0) return 0.5
+  if (total <= 0) {
+    return 0.5
+  }
   return clamp01(passed / total)
 }
 
 // "Lower is better" metrics are normalized against the worst candidate in the
 // batch, so scoring is relative to the field rather than to absolute magnitudes.
 function invertedRelative(value: number, max: number): number {
-  if (max <= 0) return 1
+  if (max <= 0) {
+    return 1
+  }
   return clamp01(1 - value / max)
 }
 
@@ -96,6 +102,8 @@ export function pickWinner(
   weights?: ScoreWeights
 ): ScoredCandidate | undefined {
   const top = scoreCandidates(candidates, weights)[0]
-  if (!top || top.disqualified) return undefined
+  if (!top || top.disqualified) {
+    return undefined
+  }
   return top
 }

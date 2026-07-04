@@ -59,16 +59,24 @@ export class TokenBudgetGuard {
 
   remaining(scope: string): number {
     const limit = this.limits.get(scope)
-    if (limit === undefined) return Infinity
+    if (limit === undefined) {
+      return Infinity
+    }
     return Math.max(0, limit - this.usedTokens(scope))
   }
 
   status(scope: string): BudgetStatus {
     const limit = this.limits.get(scope)
-    if (limit === undefined) return 'ok'
+    if (limit === undefined) {
+      return 'ok'
+    }
     const used = this.usedTokens(scope)
-    if (used >= limit) return 'exceeded'
-    if (used >= limit * this.warnRatio) return 'warn'
+    if (used >= limit) {
+      return 'exceeded'
+    }
+    if (used >= limit * this.warnRatio) {
+      return 'warn'
+    }
     return 'ok'
   }
 

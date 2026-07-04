@@ -26,7 +26,7 @@ export type HostVerifierEvent = {
   pinnedFingerprint?: string
 }
 
-export interface KnownHostsStore {
+export type KnownHostsStore = {
   get(hostId: string): string | undefined
   set(hostId: string, fingerprint: string): void
 }
@@ -56,7 +56,9 @@ export function createInMemoryKnownHostsStore(seed?: Record<string, string>): Kn
 
 export function createFileKnownHostsStore(filePath: string): KnownHostsStore {
   const load = (): Record<string, string> => {
-    if (!existsSync(filePath)) return {}
+    if (!existsSync(filePath)) {
+      return {}
+    }
     try {
       const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, string>
       return parsed && typeof parsed === 'object' ? parsed : {}
@@ -66,7 +68,9 @@ export function createFileKnownHostsStore(filePath: string): KnownHostsStore {
   }
   let cache: Record<string, string> | null = null
   const ensure = (): Record<string, string> => {
-    if (cache === null) cache = load()
+    if (cache === null) {
+      cache = load()
+    }
     return cache
   }
   return {
