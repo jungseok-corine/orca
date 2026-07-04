@@ -116,6 +116,10 @@ function cmdEscape(s: string): string {
 type BuildConnectConfigOptions = {
   includeAgent?: boolean
   includePrivateKey?: boolean
+  // Why: ssh2 trusts any host key when no hostVerifier is set. Callers pass a
+  // TOFU-pinning verifier so a spoofed server aborts before auth. See
+  // host-key-verifier.ts.
+  hostVerifier?: (key: Uint8Array) => boolean
 }
 
 // Why: ssh2 tries privateKey before agent, but parses encrypted privateKey
@@ -156,6 +160,10 @@ export function buildConnectConfig(
       : resolveUnencryptedExplicitPrivateKey(target, resolved)
   if (key) {
     config.privateKey = key.contents
+  }
+
+  if (options.hostVerifier) {
+    config.hostVerifier = options.hostVerifier
   }
 
   return config as ConnectConfig

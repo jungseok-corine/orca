@@ -36,6 +36,11 @@ import {
 } from './ssh-connection-utils'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import { isSshSessionLimitError } from './ssh-session-limit-error'
+import {
+  createHostVerifier,
+  getSharedKnownHostsStore,
+  type HostVerifierEvent
+} from './host-key-verifier'
 export type { SshConnectionCallbacks } from './ssh-connection-utils'
 
 type SshRemoteFileOptions = {
@@ -436,6 +441,25 @@ export class SshConnection {
     throw finalError
   }
 
+  // Why: TOFU host-key pinning for the native ssh2 lane, which otherwise trusts
+  // any server key. Keyed by host:port so re-labeled targets to the same box
+  // share a pin. A key change (MITM signal) aborts the handshake.
+  private buildHostVerifier(): (key: Uint8Array) => boolean {
+    const hostId = `${this.target.host}:${this.target.port}`
+    return createHostVerifier({
+      hostId,
+      store: getSharedKnownHostsStore(),
+      policy: 'tofu',
+      onEvent: (event: HostVerifierEvent) => {
+        if (event.outcome === 'mismatch') {
+          console.warn(
+            `[ssh] host key mismatch for ${hostId}: pinned ${event.pinnedFingerprint}, got ${event.fingerprint}. Connection refused.`
+          )
+        }
+      }
+    })
+  }
+
   private async attemptConnect(): Promise<void> {
     this.setState('connecting')
     this.proxyProcess?.kill()
@@ -452,7 +476,9 @@ export class SshConnection {
     this.systemSshResolvedConfig = null
     this.systemSshControlMasterDisabledForSession = false
 
-    const config = buildConnectConfig(this.target, resolved)
+    const config = buildConnectConfig(this.target, resolved, {
+      hostVerifier: this.buildHostVerifier()
+    })
 
     // Why: ssh2 doesn't support ProxyCommand/ProxyJump natively. Spawn the
     // resolved proxy and pipe its stdin/stdout as config.sock.
@@ -505,7 +531,8 @@ export class SshConnection {
       if (isAgentFallbackError(authError) && config.agent && !config.privateKey) {
         const keyConfig = buildConnectConfig(this.target, resolved, {
           includeAgent: false,
-          includePrivateKey: true
+          includePrivateKey: true,
+          hostVerifier: this.buildHostVerifier()
         })
         // Why: if the agent path failed, password/passphrase retries should not
         // go back through the same agent-only config.
